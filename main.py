@@ -4,6 +4,10 @@ from pydantic import BaseModel
 app = FastAPI()
 class TaskCreate(BaseModel):
     title: str
+    
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    done: bool | None = None
 tasks = [
     {
         "id": 1,
@@ -62,3 +66,32 @@ def create_task(task: TaskCreate):
     }
     tasks.append(new_task)
     return new_task
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, updated_task: TaskUpdate):
+
+    for task in tasks:
+        if task["id"] == task_id:
+
+            if updated_task.title is not None:
+                task["title"] = updated_task.title
+
+            if updated_task.done is not None:
+                task["done"] = updated_task.done
+
+            return task
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Task {task_id} not found"
+    )
+@app.delete("/tasks/{task_id}",status_code=204)
+def delete_task(task_id: int):
+    for task in tasks:
+        if task["id"] ==  task_id:
+            tasks.remove(task)
+            return
+    raise HTTPException(
+        status_code=404,
+        detail=f"Task {task_id} not found"
+    )
