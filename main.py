@@ -52,7 +52,6 @@ def insert_initial_tasks():
 
     cursor = conn.cursor()
 
-
     cursor.execute("SELECT COUNT(*) FROM tasks")
 
     count = cursor.fetchone()[0]
@@ -112,6 +111,7 @@ class TaskUpdate(BaseModel):
 
 
 
+
 # Root endpoint
 @app.get("/")
 def root():
@@ -142,12 +142,9 @@ def get_tasks():
 
     cursor = conn.cursor()
 
-
     cursor.execute("SELECT * FROM tasks")
 
-
     rows = cursor.fetchall()
-
 
     conn.close()
 
@@ -157,16 +154,15 @@ def get_tasks():
 
     for row in rows:
 
-        tasks.append(
-            {
-                "id": row["id"],
-                "title": row["title"],
-                "done": bool(row["done"])
-            }
-        )
+        tasks.append({
+            "id": row["id"],
+            "title": row["title"],
+            "done": bool(row["done"])
+        })
 
 
     return tasks
+
 
 
 
@@ -187,9 +183,7 @@ def get_task(task_id: int):
 
     row = cursor.fetchone()
 
-
     conn.close()
-
 
 
     if row is None:
@@ -206,28 +200,114 @@ def get_task(task_id: int):
         "done": bool(row["done"])
     }
 
+
+
+
+# CREATE task
 @app.post("/tasks", status_code=201)
 def create_task(task: TaskCreate):
+
     if not task.title.strip():
+
         raise HTTPException(
             status_code=400,
             detail="Title is required"
         )
+
+
     conn = get_connection()
-    cursor= conn.cursor()
+
+    cursor = conn.cursor()
+
+
     cursor.execute(
         """
-        INSERT INTO tasks (title,done)
-        VALUES (?,?)
+        INSERT INTO tasks (title, done)
+        VALUES (?, ?)
         """,
         (task.title, False)
-        
     )
+
+
     task_id = cursor.lastrowid
+
+
     conn.commit()
+
     conn.close()
+
+
     return {
         "id": task_id,
         "title": task.title,
         "done": False
+    }
+
+
+
+
+# UPDATE task
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, updated_task: TaskUpdate):
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+
+    # Check task exists
+    cursor.execute(
+        "SELECT * FROM tasks WHERE id = ?",
+        (task_id,)
+    )
+
+
+    row = cursor.fetchone()
+
+
+    if row is None:
+
+        conn.close()
+
+        raise HTTPException(
+            status_code=404,
+            detail=f"Task {task_id} not found"
+        )
+
+
+    # Keep old values if not provided
+    title = (
+        updated_task.title
+        if updated_task.title is not None
+        else row["title"]
+    )
+
+
+    done = (
+        updated_task.done
+        if updated_task.done is not None
+        else row["done"]
+    )
+
+
+    # Update database
+    cursor.execute(
+        """
+        UPDATE tasks
+        SET title = ?, done = ?
+        WHERE id = ?
+        """,
+        (title, done, task_id)
+    )
+
+
+    conn.commit()
+
+    conn.close()
+
+
+    return {
+        "id": task_id,
+        "title": title,
+        "done": bool(done)
     }
