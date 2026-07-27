@@ -205,3 +205,29 @@ def get_task(task_id: int):
         "title": row["title"],
         "done": bool(row["done"])
     }
+
+@app.post("/tasks", status_code=201)
+def create_task(task: TaskCreate):
+    if not task.title.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Title is required"
+        )
+    conn = get_connection()
+    cursor= conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO tasks (title,done)
+        VALUES (?,?)
+        """,
+        (task.title, False)
+        
+    )
+    task_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return {
+        "id": task_id,
+        "title": task.title,
+        "done": False
+    }
