@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import sqlite3
 
@@ -7,18 +7,21 @@ import sqlite3
 app = FastAPI()
 
 
-# Database file name
+# Database file
 DATABASE = "tasks.db"
 
 
-# Connect to SQLite database
+
+# Create connection to SQLite
 def get_connection():
+
     conn = sqlite3.connect(DATABASE)
 
-    # Allows us to access columns using names
+    # Allows access using column names
     conn.row_factory = sqlite3.Row
 
     return conn
+
 
 
 # Create database table
@@ -42,12 +45,13 @@ def create_database():
 
 
 
-# Insert example tasks only when database is empty
+# Insert example tasks only once
 def insert_initial_tasks():
 
     conn = get_connection()
 
     cursor = conn.cursor()
+
 
     cursor.execute("SELECT COUNT(*) FROM tasks")
 
@@ -56,22 +60,31 @@ def insert_initial_tasks():
 
     if count == 0:
 
-        cursor.execute("""
-        INSERT INTO tasks (title, done)
-        VALUES (?, ?)
-        """, ("Study FastAPI", False))
+        cursor.execute(
+            """
+            INSERT INTO tasks (title, done)
+            VALUES (?, ?)
+            """,
+            ("Study FastAPI", False)
+        )
 
 
-        cursor.execute("""
-        INSERT INTO tasks (title, done)
-        VALUES (?, ?)
-        """, ("Buy milk", True))
+        cursor.execute(
+            """
+            INSERT INTO tasks (title, done)
+            VALUES (?, ?)
+            """,
+            ("Buy milk", True)
+        )
 
 
-        cursor.execute("""
-        INSERT INTO tasks (title, done)
-        VALUES (?, ?)
-        """, ("Walk the dog", False))
+        cursor.execute(
+            """
+            INSERT INTO tasks (title, done)
+            VALUES (?, ?)
+            """,
+            ("Walk the dog", False)
+        )
 
 
     conn.commit()
@@ -86,9 +99,11 @@ insert_initial_tasks()
 
 
 
-# Models
+# Pydantic models
+
 class TaskCreate(BaseModel):
     title: str
+
 
 
 class TaskUpdate(BaseModel):
@@ -100,6 +115,7 @@ class TaskUpdate(BaseModel):
 # Root endpoint
 @app.get("/")
 def root():
+
     return {
         "name": "Task API",
         "version": "2.0.0",
@@ -111,13 +127,14 @@ def root():
 # Health endpoint
 @app.get("/health")
 def health():
+
     return {
         "status": "ok"
     }
 
 
 
-# Get all tasks from database
+# GET all tasks
 @app.get("/tasks")
 def get_tasks():
 
@@ -125,24 +142,66 @@ def get_tasks():
 
     cursor = conn.cursor()
 
-    # SQL query
+
     cursor.execute("SELECT * FROM tasks")
 
+
     rows = cursor.fetchall()
+
 
     conn.close()
 
 
-    # Convert SQLite rows into JSON format
     tasks = []
+
 
     for row in rows:
 
-        tasks.append({
-            "id": row["id"],
-            "title": row["title"],
-            "done": bool(row["done"])
-        })
+        tasks.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "done": bool(row["done"])
+            }
+        )
 
 
     return tasks
+
+
+
+# GET one task by ID
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+
+    cursor.execute(
+        "SELECT * FROM tasks WHERE id = ?",
+        (task_id,)
+    )
+
+
+    row = cursor.fetchone()
+
+
+    conn.close()
+
+
+
+    if row is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail=f"Task {task_id} not found"
+        )
+
+
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "done": bool(row["done"])
+    }
