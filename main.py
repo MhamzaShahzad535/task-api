@@ -1,120 +1,118 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from pydantic import BaseModel
+import sqlite3
+
+
+
 app = FastAPI()
+
+
+
+DATABASE = "tasks.db"
+
+
+
+def get_connection():
+    conn = sqlite3.connect(DATABASE)
+
+    
+    conn.row_factory = sqlite3.Row
+
+    return conn
+
+
+
+def create_database():
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY,
+        title TEXT NOT NULL,
+        done BOOLEAN NOT NULL
+    )
+    """)
+
+    conn.commit()
+
+    conn.close()
+
+
+
+
+def insert_initial_tasks():
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+
+    
+    cursor.execute("SELECT COUNT(*) FROM tasks")
+
+    count = cursor.fetchone()[0]
+
+
+    if count == 0:
+
+        cursor.execute("""
+        INSERT INTO tasks (title, done)
+        VALUES (?, ?)
+        """, ("Study FastAPI", False))
+
+
+        cursor.execute("""
+        INSERT INTO tasks (title, done)
+        VALUES (?, ?)
+        """, ("Buy milk", True))
+
+
+        cursor.execute("""
+        INSERT INTO tasks (title, done)
+        VALUES (?, ?)
+        """, ("Walk the dog", False))
+
+
+    conn.commit()
+
+    conn.close()
+
+
+
+
+create_database()
+insert_initial_tasks()
+
+
+
+
 class TaskCreate(BaseModel):
     title: str
-    
+
+
+
+
 class TaskUpdate(BaseModel):
     title: str | None = None
     done: bool | None = None
-tasks = [
-    {
-        "id": 1,
-        "title": "Study FastAPI",
-        "done": False
-    },
-    {
-        "id": 2,
-        "title": "Buy milk",
-        "done":True
-    },
-    {
-        "id": 3,
-        "title": "Walk the dog",
-        "done": False
-    }
-]
-@app.get(
-    "/",
-    description="Returns information about this API"
-)
+
+
+
+@app.get("/")
 def root():
-    return{
+    return {
         "name": "Task API",
-        "version": "1.0.0",
-        "endpoints": ["/tasks"]
+        "version": "2.0.0",
+        "database": "SQLite"
     }
-@app.get(
-    "/health",
-    description="Returns the health status of the API"
-)
+
+
+
+@app.get("/health")
 def health():
     return {
         "status": "ok"
     }
-@app.get(
-    "/tasks",
-    description="Returns the list of tasks"
-)
-def get_tasks():
-    return tasks
-
-@app.get(
-    "/tasks/{task_id}",
-    description="Returns a specific task by its ID"
-)
-def get_task(task_id: int):
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-
-    raise HTTPException(
-        status_code=404,
-        detail=f"Task {task_id} not found"
-    )
-@app.post(
-    "/tasks",
-    description="Creates a new task",
-    status_code=201
-)
-def create_task(task: TaskCreate):
-    
-    if not task.title.strip():
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Title is required"}
-        )
-    new_task = {
-        "id": len(tasks) +1,
-        "title": task.title,
-        "done" : False
-    }
-    tasks.append(new_task)
-    return new_task
-
-@app.put(
-    "/tasks/{task_id}",
-    description="Updates a specific task by its ID"
-)
-def update_task(task_id: int, updated_task: TaskUpdate):
-
-    for task in tasks:
-        if task["id"] == task_id:
-
-            if updated_task.title is not None:
-                task["title"] = updated_task.title
-
-            if updated_task.done is not None:
-                task["done"] = updated_task.done
-
-            return task
-
-    raise HTTPException(
-        status_code=404,
-        detail=f"Task {task_id} not found"
-    )
-@app.delete(
-    "/tasks/{task_id}",
-    description="Deletes a specific task by its ID",
-    status_code=204
-)
-def delete_task(task_id: int):
-    for task in tasks:
-        if task["id"] ==  task_id:
-            tasks.remove(task)
-            return
-    raise HTTPException(
-        status_code=404,
-        detail=f"Task {task_id} not found"
-    )
