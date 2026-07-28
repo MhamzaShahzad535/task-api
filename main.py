@@ -1,26 +1,30 @@
+from dotenv import load_dotenv
+import os
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 
 
 # Create FastAPI app
 app = FastAPI()
 
 
-# Database file
-DATABASE = "tasks.db"
+# Load .env file
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 
-# Create connection to SQLite
+# Create PostgreSQL connection
 def get_connection():
 
-    conn = sqlite3.connect(DATABASE)
-
-    # Allows access using column names
-    conn.row_factory = sqlite3.Row
-
-    return conn
+    return psycopg.connect(
+        DATABASE_URL,
+        row_factory=dict_row
+    )
 
 
 
@@ -31,13 +35,15 @@ def create_database():
 
     cursor = conn.cursor()
 
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tasks (
-        id INTEGER PRIMARY KEY,
+        id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         done BOOLEAN NOT NULL
     )
     """)
+
 
     conn.commit()
 
@@ -52,9 +58,13 @@ def insert_initial_tasks():
 
     cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM tasks")
 
-    count = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT COUNT(*) FROM tasks"
+    )
+
+
+    count = cursor.fetchone()["count"]
 
 
     if count == 0:
@@ -62,7 +72,7 @@ def insert_initial_tasks():
         cursor.execute(
             """
             INSERT INTO tasks (title, done)
-            VALUES (?, ?)
+            VALUES (%s, %s)
             """,
             ("Study FastAPI", False)
         )
@@ -71,7 +81,7 @@ def insert_initial_tasks():
         cursor.execute(
             """
             INSERT INTO tasks (title, done)
-            VALUES (?, ?)
+            VALUES (%s, %s)
             """,
             ("Buy milk", True)
         )
@@ -80,7 +90,7 @@ def insert_initial_tasks():
         cursor.execute(
             """
             INSERT INTO tasks (title, done)
-            VALUES (?, ?)
+            VALUES (%s, %s)
             """,
             ("Walk the dog", False)
         )
@@ -92,7 +102,7 @@ def insert_initial_tasks():
 
 
 
-# Run database setup
+# Setup database when app starts
 create_database()
 insert_initial_tasks()
 
@@ -112,15 +122,18 @@ class TaskUpdate(BaseModel):
 
 
 
+
 # Root endpoint
 @app.get("/")
 def root():
 
     return {
         "name": "Task API",
-        "version": "2.0.0",
-        "database": "SQLite"
+        "version": "3.0.0",
+        "database": "PostgreSQL"
     }
+
+
 
 
 
@@ -134,6 +147,8 @@ def health():
 
 
 
+
+
 # GET all tasks
 @app.get("/tasks")
 def get_tasks():
@@ -142,23 +157,16 @@ def get_tasks():
 
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM tasks")
 
-    rows = cursor.fetchall()
+    cursor.execute(
+        "SELECT * FROM tasks"
+    )
+
+
+    tasks = cursor.fetchall()
+
 
     conn.close()
-
-
-    tasks = []
-
-
-    for row in rows:
-
-        tasks.append({
-            "id": row["id"],
-            "title": row["title"],
-            "done": bool(row["done"])
-        })
 
 
     return tasks
@@ -166,7 +174,8 @@ def get_tasks():
 
 
 
-# GET one task by ID
+
+# GET task by ID
 @app.get("/tasks/{task_id}")
 def get_task(task_id: int):
 
@@ -176,17 +185,18 @@ def get_task(task_id: int):
 
 
     cursor.execute(
-        "SELECT * FROM tasks WHERE id = ?",
+        "SELECT * FROM tasks WHERE id = %s",
         (task_id,)
     )
 
 
-    row = cursor.fetchone()
+    task = cursor.fetchone()
+
 
     conn.close()
 
 
-    if row is None:
+    if task is None:
 
         raise HTTPException(
             status_code=404,
@@ -194,11 +204,8 @@ def get_task(task_id: int):
         )
 
 
-    return {
-        "id": row["id"],
-        "title": row["title"],
-        "done": bool(row["done"])
-    }
+    return task
+
 
 
 
@@ -223,13 +230,14 @@ def create_task(task: TaskCreate):
     cursor.execute(
         """
         INSERT INTO tasks (title, done)
-        VALUES (?, ?)
+        VALUES (%s, %s)
+        RETURNING id
         """,
         (task.title, False)
     )
 
 
-    task_id = cursor.lastrowid
+    task_id = cursor.fetchone()["id"]
 
 
     conn.commit()
@@ -246,6 +254,7 @@ def create_task(task: TaskCreate):
 
 
 
+
 # UPDATE task
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, updated_task: TaskUpdate):
@@ -255,17 +264,16 @@ def update_task(task_id: int, updated_task: TaskUpdate):
     cursor = conn.cursor()
 
 
-    # Check task exists
     cursor.execute(
-        "SELECT * FROM tasks WHERE id = ?",
+        "SELECT * FROM tasks WHERE id = %s",
         (task_id,)
     )
 
 
-    row = cursor.fetchone()
+    task = cursor.fetchone()
 
 
-    if row is None:
+    if task is None:
 
         conn.close()
 
@@ -275,27 +283,27 @@ def update_task(task_id: int, updated_task: TaskUpdate):
         )
 
 
-    # Keep old values if not provided
+
     title = (
         updated_task.title
         if updated_task.title is not None
-        else row["title"]
+        else task["title"]
     )
 
 
     done = (
         updated_task.done
         if updated_task.done is not None
-        else row["done"]
+        else task["done"]
     )
 
 
-    # Update database
+
     cursor.execute(
         """
         UPDATE tasks
-        SET title = ?, done = ?
-        WHERE id = ?
+        SET title = %s, done = %s
+        WHERE id = %s
         """,
         (title, done, task_id)
     )
@@ -306,31 +314,55 @@ def update_task(task_id: int, updated_task: TaskUpdate):
     conn.close()
 
 
+
     return {
         "id": task_id,
         "title": title,
-        "done": bool(done)
+        "done": done
     }
+
+
+
+
+
+# DELETE task
 @app.delete("/tasks/{task_id}", status_code=204)
 def delete_task(task_id: int):
-    conn= get_connection()
+
+    conn = get_connection()
+
     cursor = conn.cursor()
+
+
     cursor.execute(
-        "SELECT * FROM tasks WHERE id= ?",
+        "SELECT * FROM tasks WHERE id = %s",
         (task_id,)
     )
-    row = cursor.fetchone()
-    if row is None:
+
+
+    task = cursor.fetchone()
+
+
+    if task is None:
+
         conn.close()
+
         raise HTTPException(
             status_code=404,
-                detail=f"Task {task_id} not found"
-            )
+            detail=f"Task {task_id} not found"
+        )
+
+
+
     cursor.execute(
-        "DELETE FROM tasks WHERE id = ?",
+        "DELETE FROM tasks WHERE id = %s",
         (task_id,)
     )
+
+
     conn.commit()
+
     conn.close()
-    
+
+
     return

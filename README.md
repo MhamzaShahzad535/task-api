@@ -13,7 +13,18 @@ It demonstrates the four CRUD operations:
 * Update tasks
 * Delete tasks
 
-The API uses SQLite database storage, so task data persists even after restarting the server.
+The API uses PostgreSQL running in Docker.
+Data persists using a Docker volume, so tasks remain available after restarting the application or database container.
+
+## Running with Docker
+
+Start PostgreSQL:
+
+docker compose up -d
+
+Run the API:
+
+uvicorn main:app --reload
 
 ## Technologies
 
