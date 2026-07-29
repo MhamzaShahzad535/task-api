@@ -1,57 +1,43 @@
-from dotenv import load_dotenv
-import os
-
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import psycopg
-from psycopg.rows import dict_row
+
+from database import get_connection
 
 
-# Create FastAPI app
 app = FastAPI()
 
 
-# Load .env file
-load_dotenv()
+# -----------------------------
+# Database setup
+# -----------------------------
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-
-
-# Create PostgreSQL connection
-def get_connection():
-
-    return psycopg.connect(
-        DATABASE_URL,
-        row_factory=dict_row
-    )
-
-
-
-# Create database table
 def create_database():
 
+    print("Connecting to database...")
+
     conn = get_connection()
+
+    print("Database connected!")
 
     cursor = conn.cursor()
 
 
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS tasks (
-        id SERIAL PRIMARY KEY,
-        title TEXT NOT NULL,
-        done BOOLEAN NOT NULL
-    )
+        CREATE TABLE IF NOT EXISTS tasks (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            done BOOLEAN NOT NULL
+        )
     """)
 
 
     conn.commit()
-
     conn.close()
 
+    print("Table created!")
 
 
-# Insert example tasks only once
+
 def insert_initial_tasks():
 
     conn = get_connection()
@@ -60,7 +46,7 @@ def insert_initial_tasks():
 
 
     cursor.execute(
-        "SELECT COUNT(*) FROM tasks"
+        "SELECT COUNT(*) AS count FROM tasks"
     )
 
 
@@ -71,8 +57,8 @@ def insert_initial_tasks():
 
         cursor.execute(
             """
-            INSERT INTO tasks (title, done)
-            VALUES (%s, %s)
+            INSERT INTO tasks(title, done)
+            VALUES(%s,%s)
             """,
             ("Study FastAPI", False)
         )
@@ -80,8 +66,8 @@ def insert_initial_tasks():
 
         cursor.execute(
             """
-            INSERT INTO tasks (title, done)
-            VALUES (%s, %s)
+            INSERT INTO tasks(title, done)
+            VALUES(%s,%s)
             """,
             ("Buy milk", True)
         )
@@ -89,26 +75,40 @@ def insert_initial_tasks():
 
         cursor.execute(
             """
-            INSERT INTO tasks (title, done)
-            VALUES (%s, %s)
+            INSERT INTO tasks(title, done)
+            VALUES(%s,%s)
             """,
             ("Walk the dog", False)
         )
 
 
     conn.commit()
-
     conn.close()
 
-
-
-# Setup database when app starts
-create_database()
-insert_initial_tasks()
+    print("Initial tasks checked!")
 
 
 
-# Pydantic models
+@app.on_event("startup")
+def startup_event():
+
+    print("Starting database setup...")
+
+    try:
+        create_database()
+        print("Database table ready!")
+
+        insert_initial_tasks()
+        print("Initial tasks checked!")
+
+    except Exception as e:
+        print("DATABASE ERROR:")
+        print(e)
+        raise e
+# -----------------------------
+# Models
+# -----------------------------
+
 
 class TaskCreate(BaseModel):
     title: str
@@ -121,9 +121,11 @@ class TaskUpdate(BaseModel):
 
 
 
+# -----------------------------
+# Routes
+# -----------------------------
 
 
-# Root endpoint
 @app.get("/")
 def root():
 
@@ -135,9 +137,6 @@ def root():
 
 
 
-
-
-# Health endpoint
 @app.get("/health")
 def health():
 
@@ -147,9 +146,6 @@ def health():
 
 
 
-
-
-# GET all tasks
 @app.get("/tasks")
 def get_tasks():
 
@@ -157,27 +153,20 @@ def get_tasks():
 
     cursor = conn.cursor()
 
-
     cursor.execute(
         "SELECT * FROM tasks"
     )
 
-
     tasks = cursor.fetchall()
 
-
     conn.close()
-
 
     return tasks
 
 
 
-
-
-# GET task by ID
 @app.get("/tasks/{task_id}")
-def get_task(task_id: int):
+def get_task(task_id:int):
 
     conn = get_connection()
 
@@ -185,13 +174,12 @@ def get_task(task_id: int):
 
 
     cursor.execute(
-        "SELECT * FROM tasks WHERE id = %s",
+        "SELECT * FROM tasks WHERE id=%s",
         (task_id,)
     )
 
 
     task = cursor.fetchone()
-
 
     conn.close()
 
@@ -200,7 +188,7 @@ def get_task(task_id: int):
 
         raise HTTPException(
             status_code=404,
-            detail=f"Task {task_id} not found"
+            detail="Task not found"
         )
 
 
@@ -208,19 +196,8 @@ def get_task(task_id: int):
 
 
 
-
-
-# CREATE task
 @app.post("/tasks", status_code=201)
-def create_task(task: TaskCreate):
-
-    if not task.title.strip():
-
-        raise HTTPException(
-            status_code=400,
-            detail="Title is required"
-        )
-
+def create_task(task:TaskCreate):
 
     conn = get_connection()
 
@@ -229,8 +206,8 @@ def create_task(task: TaskCreate):
 
     cursor.execute(
         """
-        INSERT INTO tasks (title, done)
-        VALUES (%s, %s)
+        INSERT INTO tasks(title, done)
+        VALUES(%s,%s)
         RETURNING id
         """,
         (task.title, False)
@@ -253,11 +230,8 @@ def create_task(task: TaskCreate):
 
 
 
-
-
-# UPDATE task
 @app.put("/tasks/{task_id}")
-def update_task(task_id: int, updated_task: TaskUpdate):
+def update_task(task_id:int, updated_task:TaskUpdate):
 
     conn = get_connection()
 
@@ -265,7 +239,7 @@ def update_task(task_id: int, updated_task: TaskUpdate):
 
 
     cursor.execute(
-        "SELECT * FROM tasks WHERE id = %s",
+        "SELECT * FROM tasks WHERE id=%s",
         (task_id,)
     )
 
@@ -279,9 +253,8 @@ def update_task(task_id: int, updated_task: TaskUpdate):
 
         raise HTTPException(
             status_code=404,
-            detail=f"Task {task_id} not found"
+            detail="Task not found"
         )
-
 
 
     title = (
@@ -298,12 +271,11 @@ def update_task(task_id: int, updated_task: TaskUpdate):
     )
 
 
-
     cursor.execute(
         """
         UPDATE tasks
-        SET title = %s, done = %s
-        WHERE id = %s
+        SET title=%s, done=%s
+        WHERE id=%s
         """,
         (title, done, task_id)
     )
@@ -314,20 +286,16 @@ def update_task(task_id: int, updated_task: TaskUpdate):
     conn.close()
 
 
-
     return {
-        "id": task_id,
-        "title": title,
-        "done": done
+        "id":task_id,
+        "title":title,
+        "done":done
     }
 
 
 
-
-
-# DELETE task
 @app.delete("/tasks/{task_id}", status_code=204)
-def delete_task(task_id: int):
+def delete_task(task_id:int):
 
     conn = get_connection()
 
@@ -335,34 +303,28 @@ def delete_task(task_id: int):
 
 
     cursor.execute(
-        "SELECT * FROM tasks WHERE id = %s",
+        """
+        DELETE FROM tasks
+        WHERE id=%s
+        RETURNING id
+        """,
         (task_id,)
     )
 
 
-    task = cursor.fetchone()
-
-
-    if task is None:
-
-        conn.close()
-
-        raise HTTPException(
-            status_code=404,
-            detail=f"Task {task_id} not found"
-        )
-
-
-
-    cursor.execute(
-        "DELETE FROM tasks WHERE id = %s",
-        (task_id,)
-    )
+    deleted = cursor.fetchone()
 
 
     conn.commit()
 
     conn.close()
 
+
+    if deleted is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found"
+        )
 
     return
