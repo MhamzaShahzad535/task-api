@@ -1,22 +1,36 @@
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
 import os
-import psycopg
-from psycopg.rows import dict_row
+
 
 load_dotenv()
+
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 
-def get_connection():
+engine = create_engine(
+    DATABASE_URL
+)
 
-    print("Connecting to database...")
 
-    conn = psycopg.connect(
-        DATABASE_URL,
-        row_factory=dict_row
-    )
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
 
-    print("Database connected!")
 
-    return conn
+Base = declarative_base()
+
+
+def get_db():
+
+    db = SessionLocal()
+
+    try:
+        yield db
+
+    finally:
+        db.close()
