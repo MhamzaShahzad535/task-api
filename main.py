@@ -1,33 +1,28 @@
 from fastapi import FastAPI
 
-from database import Base, engine
+import models
+from database import engine
 from routers import tasks
 
 
-
-Base.metadata.create_all(
-    bind=engine
-)
+models.Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(
     title="Task API",
-    version="4.0.0"
+    version="2.0.0"
 )
 
 
-
+# Register routers
 app.include_router(
     tasks.router
 )
 
 
-
 @app.get("/")
-def root():
-
+def home():
     return {
         "name": "Task API",
-        "version": "4.0.0",
-        "database": "PostgreSQL + SQLAlchemy"
+        "version": "2.0.0"
     }
