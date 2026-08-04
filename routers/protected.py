@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends
+
+from dependencies.auth import get_current_user
 
 
 router = APIRouter(
@@ -8,17 +9,10 @@ router = APIRouter(
 )
 
 
-security = HTTPBearer()
-
-
 @router.get("/profile")
-def get_profile(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
-
-    token = credentials.credentials
+def get_profile(user = Depends(get_current_user)):
 
     return {
         "message": "Protected profile",
-        "token": token
+        "user": user
     }
