@@ -1,0 +1,13 @@
+{
+  "started_at": "2026-08-14T19:02:37.962460+00:00",
+  "finished_at": "2026-08-14T19:02:38.873780+00:00",
+  "duration_seconds": 0.91,
+  "catalogue_pages": 3,
+  "discovered_urls": 60,
+  "unique_urls": 60,
+  "pages_fetched": 0,
+  "cache_hits": 63,
+  "valid_records": 60,
+  "invalid_records": 0,
+  "failed_pages": 0
+}
