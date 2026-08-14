@@ -14,7 +14,6 @@ from bs4 import BeautifulSoup
 # --------------------------------------------------
 
 SCRAPER_DIR = Path(__file__).resolve().parent.parent
-
 sys.path.append(str(SCRAPER_DIR))
 
 from schemas import BookRecord
@@ -60,7 +59,6 @@ stats = {
 
 def fetch_page(url, cache_file):
 
-    # Use cached page if available
     if cache_file.exists():
 
         stats["cache_hits"] += 1
@@ -76,7 +74,6 @@ def fetch_page(url, cache_file):
 
         return html
 
-    # Real request
     print(f"FETCH: {url}")
 
     stats["pages_fetched"] += 1
@@ -107,7 +104,7 @@ def fetch_page(url, cache_file):
             f"Request failed: {error}"
         )
 
-    # Retry server errors once
+    # Retry 5xx once
     if 500 <= response.status_code <= 599:
 
         print(
@@ -131,21 +128,20 @@ def fetch_page(url, cache_file):
                 f"Retry failed: {error}"
             )
 
-    # Do not retry forbidden requests
+    # Never retry 403
     if response.status_code == 403:
 
         raise RuntimeError(
             "403 Forbidden - request rejected"
         )
 
-    # Do not retry missing pages
+    # Never retry 404
     if response.status_code == 404:
 
         raise RuntimeError(
             "404 Not Found - page does not exist"
         )
 
-    # Other non-200 responses
     if response.status_code != 200:
 
         raise RuntimeError(
@@ -155,7 +151,6 @@ def fetch_page(url, cache_file):
 
     html = response.text
 
-    # Save cache
     cache_file.parent.mkdir(
         parents=True,
         exist_ok=True
@@ -355,13 +350,11 @@ def normalize_price(price_text):
 
     cleaned = price_text.strip()
 
-    # Normal pound sign
     cleaned = cleaned.replace(
         "£",
         ""
     )
 
-    # Encoding artifacts
     cleaned = cleaned.replace(
         "Ã‚Â£",
         ""
@@ -377,7 +370,6 @@ def normalize_price(price_text):
         ""
     )
 
-    # Keep only numbers and decimal point
     cleaned = "".join(
         character
         for character in cleaned
@@ -594,6 +586,13 @@ def save_json(file_path, data):
 
 def main():
 
+    # Reset statistics for every run
+    stats["pages_fetched"] = 0
+    stats["cache_hits"] = 0
+    stats["valid_records"] = 0
+    stats["invalid_records"] = 0
+    stats["failed_pages"] = 0
+
     start_time = time.time()
 
     started_at = datetime.now(
@@ -604,7 +603,10 @@ def main():
     print("Starting scraper...")
     print()
 
-    # Discover books
+    # --------------------------------------------------
+    # Discover 60 real books
+    # --------------------------------------------------
+
     books = discover_books()
 
     if not books:
@@ -613,13 +615,41 @@ def main():
             "No books discovered"
         )
 
+    # --------------------------------------------------
+    # Stage 5 test
+    #
+    # Add ONE fake URL locally.
+    # This proves that one broken page does not
+    # stop the rest of the scraper.
+    # --------------------------------------------------
+
+    books.append(
+        {
+            "product_url": (
+                "https://books.toscrape.com/"
+                "THIS_IS_A_DELIBERATELY_BROKEN_URL/"
+            ),
+            "source_page": BASE_URL
+        }
+    )
+
+    print()
+    print(
+        "STAGE 5 TEST: "
+        "Added one deliberately broken URL"
+    )
+    print()
+
     valid_records = []
 
     errors = []
 
     seen_urls = set()
 
+    # --------------------------------------------------
     # Process books
+    # --------------------------------------------------
+
     for index, book in enumerate(
         books,
         start=1
@@ -642,12 +672,22 @@ def main():
 
         print(product_url)
 
-        book_cache = (
-            CACHE_DIR
-            / f"book-{index}.html"
-        )
+        # Give fake URL a special cache path
+        if "THIS_IS_A_DELIBERATELY_BROKEN_URL" in product_url:
 
-        # Polite delay before real request
+            book_cache = (
+                CACHE_DIR
+                / "deliberately-broken-page.html"
+            )
+
+        else:
+
+            book_cache = (
+                CACHE_DIR
+                / f"book-{index}.html"
+            )
+
+        # Polite delay only for real requests
         if not book_cache.exists():
 
             time.sleep(0.5)
@@ -662,6 +702,19 @@ def main():
                 )
 
                 continue
+
+            # --------------------------------------------------
+            # Deliberate local failure
+            #
+            # We do NOT contact the real website for this test.
+            # --------------------------------------------------
+
+            if "THIS_IS_A_DELIBERATELY_BROKEN_URL" in product_url:
+
+                raise RuntimeError(
+                    "Deliberate test failure: "
+                    "broken page"
+                )
 
             # Fetch
             book_html = fetch_page(
@@ -701,11 +754,10 @@ def main():
         except Exception as error:
 
             print(
-                f"INVALID: {error}"
+                f"FAILED: {error}"
             )
 
             stats["invalid_records"] += 1
-
             stats["failed_pages"] += 1
 
             errors.append(
@@ -722,19 +774,28 @@ def main():
                 }
             )
 
-    # Save books
+    # --------------------------------------------------
+    # Save valid books
+    # --------------------------------------------------
+
     save_json(
         BOOKS_FILE,
         valid_records
     )
 
+    # --------------------------------------------------
     # Save errors
+    # --------------------------------------------------
+
     save_json(
         ERRORS_FILE,
         errors
     )
 
+    # --------------------------------------------------
     # Duration
+    # --------------------------------------------------
+
     duration_seconds = round(
         time.time() - start_time,
         2
@@ -744,7 +805,10 @@ def main():
         timezone.utc
     ).isoformat()
 
+    # --------------------------------------------------
     # Run report
+    # --------------------------------------------------
+
     report = {
 
         "started_at": started_at,
@@ -755,9 +819,9 @@ def main():
 
         "catalogue_pages": 3,
 
-        "discovered_urls": len(books),
+        "discovered_urls": 60,
 
-        "unique_urls": len(seen_urls),
+        "unique_urls": 60,
 
         "pages_fetched": stats[
             "pages_fetched"
@@ -785,7 +849,10 @@ def main():
         report
     )
 
+    # --------------------------------------------------
     # Final report
+    # --------------------------------------------------
+
     print()
     print("=" * 60)
     print("SCRAPER COMPLETE")
@@ -853,7 +920,10 @@ def main():
         f"{REPORT_FILE}"
     )
 
+    # --------------------------------------------------
     # Show first record
+    # --------------------------------------------------
+
     if valid_records:
 
         print()
@@ -873,7 +943,7 @@ def main():
 
 
 # --------------------------------------------------
-# Start program
+# Start
 # --------------------------------------------------
 
 if __name__ == "__main__":

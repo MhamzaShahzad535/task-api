@@ -1,1 +1,7 @@
-[]
+[
+  {
+    "product_url": "https://books.toscrape.com/THIS_IS_A_DELIBERATELY_BROKEN_URL/",
+    "error": "Deliberate test failure: broken page",
+    "timestamp": "2026-08-14T19:05:00.953090+00:00"
+  }
+]
