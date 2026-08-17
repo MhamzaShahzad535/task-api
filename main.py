@@ -2,8 +2,8 @@ from fastapi import FastAPI
 
 import models
 from database import engine
-from routers import auth, tasks, public, protected, ai
-
+from routers import auth, tasks, public, protected
+from src.routers import ai
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
