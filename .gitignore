@@ -3,4 +3,4 @@ __pycache__/
 *.pyc
 tasks.db
 .env
-cache/
+cache/llm-costs.jsonl
