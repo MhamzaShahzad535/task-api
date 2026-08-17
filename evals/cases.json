@@ -1,0 +1,58 @@
+[
+  {
+    "text": "I was charged twice for my monthly subscription.",
+    "expected": {
+      "category": "billing",
+      "urgency": "normal"
+    }
+  },
+  {
+    "text": "The application crashes every time I try to upload a PDF.",
+    "expected": {
+      "category": "bug",
+      "urgency": "high"
+    }
+  },
+  {
+    "text": "Please add dark mode to the dashboard.",
+    "expected": {
+      "category": "feature",
+      "urgency": "low"
+    }
+  },
+  {
+    "text": "My password reset email never arrives.",
+    "expected": {
+      "category": "bug",
+      "urgency": "normal"
+    }
+  },
+  {
+    "text": "Can I get an invoice for my last payment?",
+    "expected": {
+      "category": "billing",
+      "urgency": "low"
+    }
+  },
+  {
+    "text": "The website is completely unavailable for our entire team.",
+    "expected": {
+      "category": "bug",
+      "urgency": "high"
+    }
+  },
+  {
+    "text": "It would be useful if users could export their tasks as CSV.",
+    "expected": {
+      "category": "feature",
+      "urgency": "low"
+    }
+  },
+  {
+    "text": "I have a question about something that is not related to the product.",
+    "expected": {
+      "category": "other",
+      "urgency": "low"
+    }
+  }
+]
